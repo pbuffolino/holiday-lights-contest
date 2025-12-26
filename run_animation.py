@@ -94,7 +94,7 @@ if __name__ == '__main__':
                       help='list all available sample animations',
                       action='store_true')
   parser.add_argument('--background',
-                      help='background color for the matplotlib visualization (default: black)',
+                      help='background color for the matplotlib visualization (default: gray)',
                       type=str,
                       default='gray')
   args = parser.parse_args()

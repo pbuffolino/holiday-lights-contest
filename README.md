@@ -1,4 +1,32 @@
-# Christmas Lights Animation Runner
+# Tarabyte Holiday Lights Contest
+
+In honor of the holidays, Tara and family are launching a competition to see who can write the best animation for their programmable Christmas Tree.
+
+## Competition Details
+
+**Submission Deadline:** January 11, 2026 at 11:59 pm
+
+### How to Submit
+
+You can submit your animation in one of two ways:
+
+1. **Google Form**: Submit your code via the Google Form (link to be provided)
+2. **Pull Request**: Fork this repository, create your animation in `animation.py`, and open a Pull Request
+
+### Submission Guidelines
+
+- **Multiple Submissions Welcome**: You can submit as many animations as you like! Just make separate submissions for each one.
+- **Screen Recording**: Including a screen recording of your animation running in the simulator would be awesome (highly encouraged if you can!)
+- **Configuration Notes**: Please let us know if there's a particular configuration to run your animation with (e.g., specific FPS, parameters, etc.)
+
+### What Happens Next
+
+- We'll try all submissions on the actual tree
+- Our favorite animations will be featured on TikTok
+- The community will vote on their favorites
+- **Top 3 winners will receive prizes!**
+
+# Tree Lights Animation Runner
 
 A simplified animation runner for creating and visualizing 3D light animations using matplotlib. This repository contains everything you need to create and run a single animation.
 
@@ -24,17 +52,17 @@ A simplified animation runner for creating and visualizing 3D light animations u
 
 3. **Create your animation:**
 
-   - Write your animation class in `animation.py`, OR
-   - Use a sample: `python run_animation.py --sample moving_rainbow`
+   - Write your animation class in `animation.py`
+   - You can run sample animations: `python run_animation.py --sample moving_rainbow`
 
 4. **Run your animation:**
    ```bash
    python run_animation.py
    ```
 
-## Creating an Animation
+## Creating Your Animation
 
-Create a file called `animation.py` with a class that inherits from `BaseAnimation`:
+Edit the called `animation.py` directly:
 
 ```python
 from lib.base_animation import BaseAnimation
@@ -101,8 +129,6 @@ python run_animation.py --args '{"fps": 60, "color": [255, 0, 0]}'
 # Change background color
 python run_animation.py --background white
 
-# Skip parameter validation
-python run_animation.py --no_validation
 ```
 
 ### Using Sample Animations
@@ -112,10 +138,7 @@ python run_animation.py --no_validation
 python run_animation.py --list-samples
 
 # Run a sample directly
-python run_animation.py --sample moving_rainbow
-
-# Run a sample with custom parameters
-python run_animation.py --sample snake --args '{"numFood": 20, "isRainbow": true}'
+python run_animation.py --sample red_green_swap
 ```
 
 ## Available Utilities
@@ -132,6 +155,45 @@ python run_animation.py --sample snake --args '{"numFood": 20, "isRainbow": true
 
 - `POINTS_3D` - Numpy array of shape `(500, 3)` with 3D coordinates for each pixel
 
+## Creating 3D Animations
+
+You can create animations that take advantage of the 3D spatial coordinates of the lights using `POINTS_3D` from `utils.geometry`. This allows you to create effects based on the physical position of lights in 3D space, such as planes, spheres, or distance-based patterns.
+
+### Example: Sweeping Planes
+
+The `sweeping_planes.py` sample demonstrates how to use 3D coordinates to create geometric effects:
+
+```python
+from utils.geometry import POINTS_3D
+import numpy as np
+
+class SweepingPlanes(BaseAnimation):
+    def __init__(self, frameBuf, *, fps: Optional[int] = 60,
+                 speed: float = 0.01, bandwidth: float = 0.2):
+        super().__init__(frameBuf, fps=fps)
+        # Center the points at the origin
+        min_pt = np.min(POINTS_3D, axis=0)
+        max_pt = np.max(POINTS_3D, axis=0)
+        mid_point = (max_pt + min_pt) / 2
+        self.CENTERED_POINTS_3D = POINTS_3D - mid_point
+
+    def renderNextFrame(self):
+        # Calculate distances from a plane
+        distances = np.abs(np.dot(self.CENTERED_POINTS_3D, self.plane) + d)
+        within = distances < self.bandwidth
+        self.frameBuf[within] = self.color
+        # ... move the plane through space
+```
+
+### Key Concepts for 3D Animations:
+
+- **`POINTS_3D`**: Array of shape `(500, 3)` containing (x, y, z) coordinates for each pixel
+- **Distance calculations**: Use `np.linalg.norm()` or dot products to calculate distances from planes, spheres, or other geometric shapes
+- **Centering**: You may want to center the points around the origin for easier calculations
+- **Spatial patterns**: Create effects based on distance, angle, or position relative to geometric shapes
+
+See `samples/sweeping_planes.py` for a complete example of a 3D plane-based animation.
+
 ### Validation Utilities (`utils/validation.py`)
 
 - `is_valid_rgb_color(color)` - Validate RGB color tuple
@@ -140,10 +202,9 @@ python run_animation.py --sample snake --args '{"numFood": 20, "isRainbow": true
 
 The `samples/` folder contains example animations:
 
-- **solid.py** - Solid color animation
-- **moving_rainbow.py** - Animated rainbow wave
-- **spiral.py** - 3D spiral pattern
-- **snake.py** - Snake game animation
+- **down_the_line.py** - 1D animation with pixels moving down the line with color decay
+- **red_green_swap.py** - Simple 1D animation alternating red and green colors
+- **sweeping_planes.py** - 3D animation using geometric planes that sweep through the tree
 
 ## Project Structure
 
@@ -174,6 +235,6 @@ The `samples/` folder contains example animations:
 
 - The animation runs in a matplotlib 3D scatter plot window
 - Press Ctrl+C to stop the animation
-- `NUM_PIXELS` is hardcoded to 500 in `lib/constants.py`
+- `NUM_PIXELS` is hardcoded to 500 in `lib/constants.py`, this matches the physical tree
 - All animations must inherit from `BaseAnimation`
 - Parameters are validated by default (use `--no_validation` to skip)
