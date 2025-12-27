@@ -2,7 +2,7 @@
 Brick Breaker Game on the Christmas Tree!
 - Platform at the bottom moves left/right
 - Ball bounces and breaks bricks
-- Bricks are horizontal bars of lights
+- Bricks are sequential groups of lights that alternate colors
 """
 from lib.base_animation import BaseAnimation
 from typing import Optional
@@ -20,14 +20,14 @@ class BrickBreaker(BaseAnimation):
                  ball_speed: float = 0.015,
                  paddle_speed: float = 0.02,
                  paddle_width: float = 0.4,
-                 num_brick_rows: int = 16,
+                 lights_per_brick: int = 10,
                  rotation_speed: float = 0.003):
         super().__init__(frameBuf, fps=fps)
         
         self.ball_speed = ball_speed
         self.paddle_speed = paddle_speed
         self.paddle_width = paddle_width
-        self.num_brick_rows = num_brick_rows
+        self.lights_per_brick = lights_per_brick
         self.rotation_speed = rotation_speed  # Rotation speed around tree
         
         # Center the points
@@ -78,20 +78,40 @@ class BrickBreaker(BaseAnimation):
         self.ball_vz = ball_speed  # Vertical velocity
         self.ball_radius = 0.05  # Larger ball for visibility
         
-        # Bricks: rows of lights at different heights
-        # Extend the brick area to cover more of the tree
-        brick_area_height = 0.6  # Cover more of the tree height
-        self.brick_z_positions = np.linspace(
-            self.z_max - 0.05,  # Near top
-            self.z_max - brick_area_height,  # Extend further down
-            num_brick_rows
-        )
-        self.brick_height = 0.06  # Thicker bricks
-        self.bricks_active = [True] * num_brick_rows  # Track which rows are still active
-        self.last_brick_hit = -1  # Track last brick hit to prevent multiple hits
-        self.brick_hit_cooldown = 0  # Cooldown frames before another brick can be hit
+        # Bricks: sequential groups of lights
+        # Create bricks from sequential light indices
+        # Only create bricks in the upper portion of the tree
+        num_lights = len(POINTS_3D)
         
-        # Colors
+        # Filter lights to only use those in the upper 60% of the tree
+        upper_threshold = self.z_min + (self.z_max - self.z_min) * 0.4
+        upper_indices = np.where(self.z >= upper_threshold)[0]
+        
+        # Create bricks from filtered indices
+        self.bricks = []
+        num_full_bricks = len(upper_indices) // lights_per_brick
+        
+        for i in range(num_full_bricks):
+            start_idx = i * lights_per_brick
+            end_idx = start_idx + lights_per_brick
+            brick_indices = upper_indices[start_idx:end_idx].tolist()
+            
+            # Calculate brick properties
+            brick_z_values = self.z[brick_indices]
+            brick_y_values = self.y[brick_indices]
+            
+            self.bricks.append({
+                'indices': brick_indices,
+                'active': True,
+                'z_min': np.min(brick_z_values),
+                'z_max': np.max(brick_z_values),
+                'z_center': np.mean(brick_z_values),
+                'y_min': np.min(brick_y_values),
+                'y_max': np.max(brick_y_values),
+                'y_center': np.mean(brick_y_values),
+            })
+        
+        # Colors - alternate red and green
         self.bg_color = np.array([5, 5, 20])  # Dark blue background
         self.paddle_color = np.array([255, 255, 255])  # White paddle
         self.ball_color = np.array([255, 255, 0])  # Yellow ball
@@ -107,11 +127,13 @@ class BrickBreaker(BaseAnimation):
         self.win_animation_frames = 0  # Track win animation duration
         self.loss_animation_frames = 0  # Track loss animation duration
         self.ball_fall_count = 0  # Track number of times ball has fallen
+        self.last_brick_hit = -1  # Track last brick hit to prevent multiple hits
+        self.brick_hit_cooldown = 0  # Cooldown frames before another brick can be hit
         self.frame_count = 0
         
         print(f"Brick Breaker initialized!")
         print(f"Game area: Y=[{self.left_wall:.2f}, {self.right_wall:.2f}], Z=[{self.bottom:.2f}, {self.top_wall:.2f}]")
-        print(f"Brick rows: {num_brick_rows}")
+        print(f"Total bricks: {len(self.bricks)} ({lights_per_brick} lights per brick)")
         print(f"Paddle snapped to Z={self.paddle_z:.4f}, row spacing={self.z_row_spacing:.4f}")
         print(f"Rotation speed: {rotation_speed}")
     
@@ -182,14 +204,20 @@ class BrickBreaker(BaseAnimation):
         if self.brick_hit_cooldown > 0:
             self.brick_hit_cooldown -= 1
         else:
-            for i, brick_z in enumerate(self.brick_z_positions):
-                if not self.bricks_active[i]:
+            for i, brick in enumerate(self.bricks):
+                if not brick['active']:
                     continue
                 
-                # Check if ball hits this brick row
-                if (self.ball_z >= brick_z - self.brick_height / 2 and 
-                    self.ball_z <= brick_z + self.brick_height / 2):
-                    self.bricks_active[i] = False
+                # Check if ball is within the brick's Z and Y range
+                # Add some tolerance for better collision detection
+                z_tolerance = 0.03
+                y_tolerance = 0.05
+                
+                if (self.ball_z >= brick['z_min'] - z_tolerance and 
+                    self.ball_z <= brick['z_max'] + z_tolerance and
+                    self.ball_y >= brick['y_min'] - y_tolerance and
+                    self.ball_y <= brick['y_max'] + y_tolerance):
+                    brick['active'] = False
                     self.ball_vz = -self.ball_vz
                     self.last_brick_hit = i
                     self.brick_hit_cooldown = 5  # 5 frame cooldown before next brick can be hit
@@ -210,7 +238,7 @@ class BrickBreaker(BaseAnimation):
                 self._reset_ball()
         
         # Check win condition
-        if not any(self.bricks_active) and not self.won:
+        if not any(brick['active'] for brick in self.bricks) and not self.won:
             self.won = True
             self.win_animation_frames = 0  # Start win animation
     
@@ -222,7 +250,10 @@ class BrickBreaker(BaseAnimation):
     
     def _reset_game(self):
         """Reset the entire game."""
-        self.bricks_active = [True] * self.num_brick_rows
+        # Reset all bricks to active
+        for brick in self.bricks:
+            brick['active'] = True
+        
         self._reset_ball()
         self.won = False
         self.lost = False
@@ -285,17 +316,16 @@ class BrickBreaker(BaseAnimation):
         # Clear to background
         self.frameBuf[:] = self.bg_color
         
-        # Draw bricks (horizontal bars) - fixed on tree, no rotation
-        # Use original Y coordinates (not projected) so bricks stay fixed
-        for i, brick_z in enumerate(self.brick_z_positions):
-            if not self.bricks_active[i]:
+        # Draw bricks - each brick is a specific set of sequential light indices
+        for i, brick in enumerate(self.bricks):
+            if not brick['active']:
                 continue
             
-            # Find all points in this brick row - bricks are always visible, no face filtering
-            in_brick = (np.abs(self.z - brick_z) < self.brick_height / 2)
-            # Alternate red and green based on row index
+            # Set color for all lights in this brick
+            # Alternate red and green based on brick index
             color = self.brick_colors[i % len(self.brick_colors)]
-            self.frameBuf[in_brick] = color
+            for light_idx in brick['indices']:
+                self.frameBuf[light_idx] = color
         
         # Draw paddle - use projected Y coordinate for horizontal position
         # Increase z tolerance to ensure visibility (allow for slight variations)
