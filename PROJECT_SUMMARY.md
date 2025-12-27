@@ -1,12 +1,25 @@
 # Brick Breaker - Holiday Lights Contest Project Summary
 
 **Project:** Brick Breaker Game for 500-LED Christmas Tree  
-**Author:** Pat / seeknay (from TikTok)  
-**Created With:** Cursor AI Assistant  
+**Designed by:** Pat "seeknay" (from TikTok)  
+**Created with:** Cursor AI Assistant  
 **Date:** December 27, 2025  
-**Status:** Complete - For Fun (Not a Prize Entry)
+**Purpose:** For fun and learning - NOT a contest/prize entry  
+**Status:** Complete and Fully Documented
 
 ---
+
+## 🎯 Project Purpose
+
+This project was created as a fun learning experience exploring:
+- 3D LED programming and spatial algorithms
+- Game physics on non-traditional displays
+- AI-assisted software development with Cursor
+- Creative applications of physical computing
+
+**Important Note:** This is a personal project for enjoyment and learning,
+not submitted for any prizes or competition. Feel free to use, learn from,
+and build upon this code!
 
 ## 🎮 Project Overview
 

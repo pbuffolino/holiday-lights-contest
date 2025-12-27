@@ -2,8 +2,28 @@
 <html>
 <head>
     <title>Brick Breaker - Tree Game</title>
-    <meta name="author" content="Pat / seeknay (from TikTok) with Cursor AI">
-    <meta name="description" content="Brick Breaker game for 500-LED Christmas tree - Created for fun!">
+    <meta name="author" content="Pat 'seeknay' (from TikTok) with Cursor AI">
+    <meta name="description" content="Brick Breaker game for 500-LED Christmas tree - Created for fun and learning!">
+    
+    <!--
+    ================================================================================
+    Brick Breaker Game - Web Viewer
+    
+    A 2D visualization of the brick breaker game running on a 500-LED Christmas tree.
+    This viewer matches the Python implementation's gameplay mechanics.
+    
+    Features:
+    - 47 individual bricks (5 lights each) in red/green alternating colors
+    - AI-controlled paddle that follows the ball
+    - Spatial collision detection using Y/Z bounding boxes
+    - Score tracking and auto-reset
+    
+    Designed by: Pat "seeknay" (from TikTok)
+    Created with: Cursor AI Assistant  
+    Purpose: For fun and learning - NOT a contest entry
+    Date: December 27, 2025
+    ================================================================================
+    -->
     <style>
         body {
             margin: 0;
@@ -56,7 +76,9 @@
 </head>
 <body>
     <h1>🎮 Brick Breaker on the Tree! 🎄</h1>
-    <div class="attribution">Created by Pat / seeknay with Cursor AI • For fun! • 47 bricks (5 lights each)</div>
+    <div class="attribution">
+        Created by Pat "seeknay" with Cursor AI • For fun and learning! • 47 bricks (5 lights each)
+    </div>
     <div id="controls">
         <button onclick="startGame()">▶️ Start Game</button>
         <button onclick="pauseGame()">⏸️ Pause</button>
@@ -69,27 +91,32 @@
     <div class="info" id="info">Press Start to play!</div>
 
     <script>
-        let points = [];
-        let colors = [];
-        let center = [0, 0, 0];
+        // ====================================================================
+        // Brick Breaker Game Logic
+        // Matches the Python implementation's mechanics and parameters
+        // ====================================================================
+        
+        let points = [];  // 3D coordinates of all 500 lights
+        let colors = [];  // Current RGB values for each light
+        let center = [0, 0, 0];  // Calculated center of tree
         let animationId = null;
         let isPaused = true;
         let score = 0;
         
-        // Game state
+        // === Game State ===
         const game = {
-            // Boundaries (will be set after loading points)
+            // Boundaries (set after loading tree points)
             yMin: -0.4, yMax: 0.4,
             zMin: -0.45, zMax: 0.62,
             
-            // Paddle
+            // Paddle parameters (matches Python version)
             paddleY: 0,
             paddleZ: -0.37,
             paddleWidth: 0.25,  // Updated to match Python version
             paddleHeight: 0.04,
             paddleSpeed: 0.02,  // Updated to match Python version
             
-            // Ball
+            // Ball parameters (matches Python version)
             ballY: 0,
             ballZ: -0.27,
             ballVY: 0.0105,     // Updated to match Python speed (0.015 * 0.7)
@@ -97,11 +124,12 @@
             ballRadius: 0.05,   // Updated to match Python version
             baseSpeed: 0.015,
             
-            // Bricks - now sequential groups instead of rows
+            // Brick system (sequential groups, not horizontal slices)
             bricks: [],
-            lightsPerBrick: 5,
+            lightsPerBrick: 5,  // 5 lights per brick = 47 total bricks
             
             init() {
+                // === Initialize Game State ===
                 this.paddleY = 0;
                 this.paddleZ = this.zMin + 0.12;
                 this.ballY = 0;
@@ -109,10 +137,11 @@
                 this.ballVY = this.baseSpeed * 0.7;
                 this.ballVZ = this.baseSpeed;
                 
-                // Create sequential brick groups (matching Python implementation)
+                // === Create Sequential Brick Groups ===
+                // This matches the Python implementation exactly
                 this.bricks = [];
                 
-                // Filter points in upper 60% of tree
+                // Filter to upper 60% of tree (brick area)
                 const upperThreshold = this.zMin + (this.zMax - this.zMin) * 0.4;
                 const upperIndices = [];
                 for (let i = 0; i < points.length; i++) {
@@ -128,18 +157,18 @@
                     const endIdx = startIdx + this.lightsPerBrick;
                     const indices = upperIndices.slice(startIdx, endIdx);
                     
-                    // Calculate brick bounds
+                    // Calculate spatial bounds for collision detection
                     const zValues = indices.map(idx => points[idx][2]);
                     const yValues = indices.map(idx => points[idx][1]);
                     
                     this.bricks.push({
-                        indices: indices,
-                        active: true,
-                        zMin: Math.min(...zValues),
+                        indices: indices,              // Which lights make up this brick
+                        active: true,                  // Is brick still in play?
+                        zMin: Math.min(...zValues),    // Spatial bounds for collision
                         zMax: Math.max(...zValues),
                         yMin: Math.min(...yValues),
                         yMax: Math.max(...yValues),
-                        color: this.getBrickColor(i)
+                        color: this.getBrickColor(i)   // Red or green
                     });
                 }
                 

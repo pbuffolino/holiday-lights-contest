@@ -1,14 +1,23 @@
 # Holiday Lights Contest - Development Instructions
 
+**Current Project:** Brick Breaker Game  
+**Designed by:** Pat "seeknay" (from TikTok)  
+**Created with:** Cursor AI Assistant  
+**Purpose:** For fun and learning - NOT a contest entry
+
+---
+
 ## Project Overview
 
-This is a Python-based animation framework for creating 3D light animations for a programmable Christmas tree with 500 LEDs. Animations are visualized using matplotlib in a 3D scatter plot.
+This is a Python-based animation framework for creating 3D light animations for a programmable Christmas tree with 500 LEDs. The current implementation is a fully playable Brick Breaker game that showcases advanced 3D spatial programming, game physics, and AI-controlled gameplay.
+
+This project was created as a learning experience exploring LED programming, spatial algorithms, and AI-assisted development. Feel free to use and learn from this code!
 
 **Key Details:**
 - **NUM_PIXELS**: 500 (hardcoded in `lib/constants.py`)
 - **Python Version**: 3.10 or higher
 - **Main Dependencies**: numpy, matplotlib, typeguard
-- **Submission Deadline**: January 11, 2026 at 11:59 pm
+- **Contest Deadline**: January 11, 2026 at 11:59 pm (not participating for prizes)
 
 ## Project Structure
 

@@ -1,13 +1,31 @@
 """
 Brick Breaker Game on the Christmas Tree!
-- Platform at the bottom moves left/right
-- Ball bounces and breaks bricks
-- Bricks are sequential groups of lights that alternate colors
 
-Author: Pat / seeknay (from TikTok)
+A fully playable brick breaker game that runs on a 500-LED Christmas tree.
+The game uses 3D spatial coordinates to create an immersive gaming experience
+with individual brick destruction, AI-controlled paddle, and spectacular animations.
+
+Features:
+- 47 individual bricks (5 lights each) that alternate red and green
+- AI-controlled paddle that follows the ball
+- Rotating gameplay that cycles through different faces of the tree
+- Win animation: Rainbow wave effect with smooth color transitions
+- Loss animation: White wash cascading from top to bottom
+- Multiple lives system (loss on every 3rd fall)
+- Auto-reset for continuous gameplay
+
+Implementation:
+- Bricks are sequential groups of light indices (not horizontal slices)
+- Uses YZ plane projection for 2D game logic on 3D tree
+- Spatial collision detection using Y/Z bounding boxes
+- Rotates around tree, cycling through 6 different faces
+
+================================================================================
+Designed by: Pat "seeknay" (from TikTok)
 Created with: Cursor AI Assistant
-Purpose: For fun and learning (not a prize entry)
+Purpose: For fun and learning - NOT a contest entry
 Date: December 27, 2025
+================================================================================
 """
 from lib.base_animation import BaseAnimation
 from typing import Optional
@@ -16,8 +34,22 @@ import numpy as np
 
 class BrickBreaker(BaseAnimation):
     """
-    Classic Brick Breaker game displayed on the tree.
-    Uses YZ plane (front view) for game coordinates.
+    Classic Brick Breaker game displayed on a 3D Christmas tree.
+    
+    This animation creates a playable brick breaker game using the tree's
+    3D spatial coordinates. The game uses YZ plane projection (front view)
+    for 2D game mechanics while rotating around the tree.
+    
+    Game Elements:
+    - Paddle (white): AI-controlled, follows ball with lag
+    - Ball (yellow): Bounces off walls, paddle, and bricks
+    - Bricks (red/green): 47 individual groups of 5 lights each
+    
+    Technical Approach:
+    - Sequential brick structure: Each brick is a group of consecutive light indices
+    - Spatial collision: Uses Y/Z bounding boxes for precise collision detection
+    - Rotation system: Cycles through 6 faces of the tree between games
+    - State machine: Handles playing, win, and loss states with animations
     """
     
     def __init__(self, frameBuf: np.ndarray, *, 
@@ -27,72 +59,88 @@ class BrickBreaker(BaseAnimation):
                  paddle_width: float = 0.25,
                  lights_per_brick: int = 5,
                  rotation_speed: float = 0.003):
+        """
+        Initialize the Brick Breaker game.
+        
+        Args:
+            frameBuf: Numpy array (500, 3) for RGB values (0-255)
+            fps: Frames per second for animation timing
+            ball_speed: Ball movement speed in game coordinates
+            paddle_speed: Paddle AI tracking speed
+            paddle_width: Paddle width in game coordinates (smaller = harder)
+            lights_per_brick: Number of consecutive lights per brick (5 = 47 bricks)
+            rotation_speed: Speed of rotation around tree between games
+        """
         super().__init__(frameBuf, fps=fps)
         
+        # Store game parameters
         self.ball_speed = ball_speed
         self.paddle_speed = paddle_speed
         self.paddle_width = paddle_width
         self.lights_per_brick = lights_per_brick
-        self.rotation_speed = rotation_speed  # Rotation speed around tree
+        self.rotation_speed = rotation_speed
         
-        # Center the points
+        # === 3D Coordinate Setup ===
+        # Center all points at origin for easier calculations
         self.center = np.mean(POINTS_3D, axis=0)
         self.centered = POINTS_3D - self.center
         
-        # Store full 3D coordinates
-        self.x = self.centered[:, 0]  # front-to-back
-        self.y = self.centered[:, 1]  # left-to-right
-        self.z = self.centered[:, 2]  # vertical
+        # Extract individual coordinate arrays
+        self.x = self.centered[:, 0]  # X: front-to-back depth
+        self.y = self.centered[:, 1]  # Y: left-to-right (horizontal in game)
+        self.z = self.centered[:, 2]  # Z: bottom-to-top (vertical in game)
         
-        # Calculate angles in XY plane for rotation
-        self.xy_angles = np.arctan2(self.y, self.x)  # Angle around tree
-        self.xy_distances = np.sqrt(self.x**2 + self.y**2)  # Distance from center in XY plane
+        # === Rotation System ===
+        # Calculate polar coordinates in XY plane for rotating view
+        self.xy_angles = np.arctan2(self.y, self.x)  # Angle around tree axis
+        self.xy_distances = np.sqrt(self.x**2 + self.y**2)  # Radius from center
         
-        # Initial rotation angle - start on first face
-        self.game_count = 0  # Track number of games to cycle through faces
-        self.faces_per_cycle = 6  # Number of different faces to cycle through
-        # Set initial rotation to first face
-        self.rotation_angle = 0.0
+        # === Game Face Rotation ===
+        # Track which "face" of the tree we're viewing
+        self.game_count = 0  # Number of games played
+        self.faces_per_cycle = 6  # Evenly distribute 6 viewing angles around tree
+        self.rotation_angle = 0.0  # Current rotation angle (radians)
         
-        # Normalize to game coordinates (will be recalculated based on visible face)
+        # === Game Boundaries ===
+        # Define playable area in YZ coordinates
         self.z_min, self.z_max = self.z.min(), self.z.max()
         
-        # Find unique Z coordinates (rows) for snapping paddle to a single row
+        # Find actual rows of lights for paddle snapping
         z_rounded = np.round(self.z, decimals=3)
         self.unique_z_rows = np.unique(z_rounded)
         self.z_row_spacing = np.min(np.diff(np.sort(self.unique_z_rows))) if len(self.unique_z_rows) > 1 else 0.01
         
-        # Game boundaries - use reasonable defaults for projected coordinates
-        # Projected Y will be in range approximately [-0.4, 0.4] based on tree radius
+        # Game area boundaries (in projected YZ coordinates)
         self.left_wall = -0.35
         self.right_wall = 0.35
         self.top_wall = self.z_max - 0.05
         self.bottom = self.z_min + 0.05
         
-        # Paddle - snap to nearest row
-        target_paddle_z = self.z_min + 0.12  # Desired position
-        self.paddle_z = self._snap_to_row(target_paddle_z)  # Snapped to actual row
-        self.paddle_y = 0.0  # Horizontal position (center)
-        self.paddle_height = self.z_row_spacing * 0.8  # Very small, just for collision detection
-        self.paddle_direction = 1  # 1 = right, -1 = left
+        # === Paddle Setup ===
+        # Paddle snaps to nearest actual row of lights for visibility
+        target_paddle_z = self.z_min + 0.12
+        self.paddle_z = self._snap_to_row(target_paddle_z)
+        self.paddle_y = 0.0  # Starts at center horizontally
+        self.paddle_height = self.z_row_spacing * 0.8  # Thin, just for collision
+        self.paddle_direction = 1  # Not currently used (AI controlled)
         
-        # Ball
-        self.ball_y = 0.0
-        self.ball_z = self.paddle_z + 0.15
-        self.ball_vy = ball_speed * 0.7  # Horizontal velocity
+        # === Ball Setup ===
+        self.ball_y = 0.0  # Horizontal position
+        self.ball_z = self.paddle_z + 0.15  # Start above paddle
+        self.ball_vy = ball_speed * 0.7  # Horizontal velocity (slightly slower)
         self.ball_vz = ball_speed  # Vertical velocity
-        self.ball_radius = 0.05  # Larger ball for visibility
+        self.ball_radius = 0.05  # Collision radius
         
-        # Bricks: sequential groups of lights
-        # Create bricks from sequential light indices
-        # Only create bricks in the upper portion of the tree
+        # === Brick System ===
+        # Create bricks from sequential groups of light indices
+        # This approach allows individual brick destruction (vs horizontal slices)
         num_lights = len(POINTS_3D)
         
-        # Filter lights to only use those in the upper 60% of the tree
+        # Only use lights in upper 60% of tree for brick area
         upper_threshold = self.z_min + (self.z_max - self.z_min) * 0.4
         upper_indices = np.where(self.z >= upper_threshold)[0]
         
-        # Create bricks from filtered indices
+        # Group sequential indices into bricks
         self.bricks = []
         num_full_bricks = len(upper_indices) // lights_per_brick
         
@@ -101,14 +149,15 @@ class BrickBreaker(BaseAnimation):
             end_idx = start_idx + lights_per_brick
             brick_indices = upper_indices[start_idx:end_idx].tolist()
             
-            # Calculate brick properties
+            # Calculate spatial bounds for collision detection
             brick_z_values = self.z[brick_indices]
             brick_y_values = self.y[brick_indices]
             
+            # Store brick with all metadata
             self.bricks.append({
-                'indices': brick_indices,
-                'active': True,
-                'z_min': np.min(brick_z_values),
+                'indices': brick_indices,  # Which lights make up this brick
+                'active': True,  # Is this brick still in play?
+                'z_min': np.min(brick_z_values),  # Spatial bounds for collision
                 'z_max': np.max(brick_z_values),
                 'z_center': np.mean(brick_z_values),
                 'y_min': np.min(brick_y_values),
@@ -116,7 +165,7 @@ class BrickBreaker(BaseAnimation):
                 'y_center': np.mean(brick_y_values),
             })
         
-        # Colors - alternate red and green
+        # === Colors ===
         self.bg_color = np.array([5, 5, 20])  # Dark blue background
         self.paddle_color = np.array([255, 255, 255])  # White paddle
         self.ball_color = np.array([255, 255, 0])  # Yellow ball
@@ -126,14 +175,15 @@ class BrickBreaker(BaseAnimation):
             np.array([0, 255, 0]),     # Green
         ]
         
+        # === Game State ===
         self.game_over = False
         self.won = False
         self.lost = False
-        self.win_animation_frames = 0  # Track win animation duration
-        self.loss_animation_frames = 0  # Track loss animation duration
-        self.ball_fall_count = 0  # Track number of times ball has fallen
-        self.last_brick_hit = -1  # Track last brick hit to prevent multiple hits
-        self.brick_hit_cooldown = 0  # Cooldown frames before another brick can be hit
+        self.win_animation_frames = 0
+        self.loss_animation_frames = 0
+        self.ball_fall_count = 0  # Track falls for lives system
+        self.last_brick_hit = -1  # Prevent multiple hits per frame
+        self.brick_hit_cooldown = 0  # Cooldown timer between brick hits
         self.frame_count = 0
         
         print(f"Brick Breaker initialized!")
@@ -143,109 +193,150 @@ class BrickBreaker(BaseAnimation):
         print(f"Rotation speed: {rotation_speed}")
     
     def _get_visible_face_coordinates(self):
-        """Calculate which lights are on the visible face and their projected coordinates."""
-        # Calculate relative angle from current rotation
+        """
+        Calculate which lights are on the visible face and their projected coordinates.
+        
+        The game rotates around the tree, so we need to determine which lights
+        are currently on the "front" face being played on. This creates a dynamic
+        view that showcases different parts of the tree.
+        
+        Returns:
+            visible (np.ndarray): Boolean array indicating which lights are visible
+            projected_y (np.ndarray): Horizontal positions of lights in game space
+        """
+        # Calculate each light's angle relative to current viewing angle
         relative_angles = self.xy_angles - self.rotation_angle
-        # Normalize to [-pi, pi]
+        # Normalize angles to [-π, π] range
         relative_angles = np.arctan2(np.sin(relative_angles), np.cos(relative_angles))
         
-        # Define visible face as lights within ±90 degrees of front (0 degrees)
-        # Use a wider angle for smoother transitions
-        face_angle_tolerance = np.pi * 0.6  # 108 degrees visible arc
+        # Define visible face as ±108 degrees (wider for smooth transitions)
+        face_angle_tolerance = np.pi * 0.6
         visible = np.abs(relative_angles) < face_angle_tolerance
         
-        # Project visible lights: use distance * sin(angle) as horizontal position
-        # This creates a curved "front view" that rotates around the tree
+        # Project 3D positions to 2D game plane
+        # Uses cylindrical projection: distance × sin(angle)
         projected_y = self.xy_distances * np.sin(relative_angles)
         
         return visible, projected_y
     
     def _snap_to_row(self, z_position):
-        """Snap a Z position to the nearest actual row of lights."""
+        """
+        Snap a Z position to the nearest actual row of lights.
+        
+        The tree has lights at discrete Z heights. This ensures game elements
+        (like the paddle) align with actual light positions for visibility.
+        
+        Args:
+            z_position: Desired Z coordinate
+            
+        Returns:
+            Snapped Z coordinate at nearest light row
+        """
         if len(self.unique_z_rows) == 0:
             return z_position
         idx = np.argmin(np.abs(self.unique_z_rows - z_position))
         return self.unique_z_rows[idx]
     
     def _move_paddle(self):
-        """Move paddle automatically (follows ball with some lag)."""
-        # Simple AI: move toward ball
+        """
+        Move paddle automatically using AI to follow the ball.
+        
+        Simple but effective AI: paddle moves toward ball's horizontal position
+        with slight lag for realism. Creates engaging gameplay without user input.
+        """
+        # Track ball with tolerance to prevent jittery movement
         if self.ball_y > self.paddle_y + 0.02:
             self.paddle_y += self.paddle_speed
         elif self.ball_y < self.paddle_y - 0.02:
             self.paddle_y -= self.paddle_speed
         
-        # Clamp to boundaries
+        # Keep paddle within game boundaries
         half_width = self.paddle_width / 2
         self.paddle_y = np.clip(self.paddle_y, self.left_wall + half_width, self.right_wall - half_width)
     
     def _move_ball(self):
-        """Move ball and handle collisions."""
-        # Move ball
-        self.ball_y += self.ball_vy
-        self.ball_z += self.ball_vz
+        """
+        Move ball and handle all collision detection.
         
-        # Wall collisions
+        This is the core game logic that handles:
+        - Ball movement
+        - Wall collisions (bounce)
+        - Paddle collisions (bounce + spin)
+        - Brick collisions (destroy + bounce)
+        - Ball falling (lives system)
+        - Win condition (all bricks destroyed)
+        """
+        # === Ball Movement ===
+        self.ball_y += self.ball_vy  # Horizontal
+        self.ball_z += self.ball_vz  # Vertical
+        
+        # === Wall Collisions ===
+        # Left/right walls: reverse horizontal velocity
         if self.ball_y <= self.left_wall or self.ball_y >= self.right_wall:
             self.ball_vy = -self.ball_vy
             self.ball_y = np.clip(self.ball_y, self.left_wall, self.right_wall)
         
+        # Top wall: reverse vertical velocity
         if self.ball_z >= self.top_wall:
             self.ball_vz = -self.ball_vz
             self.ball_z = self.top_wall
         
-        # Paddle collision - use reasonable collision zone for gameplay
-        # Visual paddle is on single row, but collision zone is slightly larger
-        collision_height = 0.04  # Reasonable collision zone
+        # === Paddle Collision ===
+        # Use slightly larger collision zone than visual paddle for better gameplay
+        collision_height = 0.04
         if (self.ball_z <= self.paddle_z + collision_height and 
             self.ball_z >= self.paddle_z - self.ball_radius and
             abs(self.ball_y - self.paddle_y) < self.paddle_width / 2):
-            self.ball_vz = abs(self.ball_vz)  # Bounce up
-            # Add some angle based on where ball hits paddle
+            # Bounce up
+            self.ball_vz = abs(self.ball_vz)
+            # Add horizontal spin based on where ball hit paddle
+            # Hit on edge = more spin, hit on center = less spin
             hit_pos = (self.ball_y - self.paddle_y) / (self.paddle_width / 2)
             self.ball_vy = hit_pos * self.ball_speed
         
-        # Brick collisions - with cooldown to prevent multiple hits
+        # === Brick Collisions ===
+        # Cooldown prevents hitting multiple bricks in single frame
         if self.brick_hit_cooldown > 0:
             self.brick_hit_cooldown -= 1
         else:
+            # Check each active brick for collision
             for i, brick in enumerate(self.bricks):
                 if not brick['active']:
                     continue
                 
-                # Check if ball is within the brick's Z and Y range
-                # Add some tolerance for better collision detection
-                z_tolerance = 0.03
+                # Spatial collision: is ball within brick's Y and Z bounds?
+                z_tolerance = 0.03  # Add tolerance for better hit detection
                 y_tolerance = 0.05
                 
                 if (self.ball_z >= brick['z_min'] - z_tolerance and 
                     self.ball_z <= brick['z_max'] + z_tolerance and
                     self.ball_y >= brick['y_min'] - y_tolerance and
                     self.ball_y <= brick['y_max'] + y_tolerance):
+                    # Brick hit! Destroy it and bounce ball
                     brick['active'] = False
                     self.ball_vz = -self.ball_vz
                     self.last_brick_hit = i
-                    self.brick_hit_cooldown = 5  # 5 frame cooldown before next brick can be hit
-                    break
+                    self.brick_hit_cooldown = 5  # 5 frames before next hit allowed
+                    break  # Only one brick per frame
         
-        # Ball falls below paddle - loss every third time, otherwise reset
+        # === Ball Falls Below Paddle ===
         if self.ball_z < self.bottom - 0.1:
-            # Only if not already won or lost
             if not self.won and not self.lost:
                 self.ball_fall_count += 1
-                # Loss on every 3rd fall
+                # Lives system: lose on every 3rd fall
                 if self.ball_fall_count % 3 == 0:
                     self.lost = True
-                    self.loss_animation_frames = 0  # Start loss animation
+                    self.loss_animation_frames = 0
                 else:
-                    self._reset_ball()
+                    self._reset_ball()  # Give another chance
             else:
                 self._reset_ball()
         
-        # Check win condition
+        # === Win Condition ===
+        # All bricks destroyed?
         if not any(brick['active'] for brick in self.bricks) and not self.won:
             self.won = True
-            self.win_animation_frames = 0  # Start win animation
+            self.win_animation_frames = 0
     
     def _reset_ball(self):
         """Reset ball to starting position."""
