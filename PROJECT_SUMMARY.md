@@ -199,7 +199,6 @@ holiday-lights-contest/
 ├── INSTRUCTIONS.md              # Development documentation
 ├── README.md                    # Public contest README
 ├── PROJECT_SUMMARY.md           # This file
-├── SNOWFLAKE_PLAN.md           # Previous animation plan
 ├── requirements.txt             # Python dependencies
 │
 ├── lib/                         # Framework (do not modify)
