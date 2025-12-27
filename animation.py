@@ -1,7 +1,7 @@
 """
 Brick Breaker Game on the Christmas Tree - Version 2.1 (Grid-Based)
 
-A fully playable brick breaker game that runs on a 500-LED Christmas tree.
+An automated brick breaker game that runs on a 500-LED Christmas tree. The game plays itself with an AI-controlled paddle.
 This version uses a TRUE 3D GRID system based on angular sections and height bands,
 creating properly mapped "faces" of the tree for accurate spatial gameplay.
 
