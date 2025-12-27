@@ -19,8 +19,8 @@ class BrickBreaker(BaseAnimation):
                  fps: Optional[int] = 30,
                  ball_speed: float = 0.015,
                  paddle_speed: float = 0.02,
-                 paddle_width: float = 0.4,
-                 lights_per_brick: int = 10,
+                 paddle_width: float = 0.25,
+                 lights_per_brick: int = 5,
                  rotation_speed: float = 0.003):
         super().__init__(frameBuf, fps=fps)
         
